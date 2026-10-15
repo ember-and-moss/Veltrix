@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; base-uri 'none';">
+<title>VELTRIX — Dateiverschlüsselung</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1019;--panel:#151c29;--line:#29364b;--text:#eef3ff;--muted:#a8b4c9;--blue:#3e6cf4;--green:#7be0bd;--red:#ff9e9e}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:760px;margin:0 auto;padding:36px 18px 60px}header{margin-bottom:28px}h1{margin:0;font-size:2rem;letter-spacing:.12em}header p,.hint{color:var(--muted)}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;margin:16px 0}h2{font-size:1.15rem;margin:0 0 6px}p{margin:6px 0 16px}.field{display:block;font-weight:600;margin:14px 0 6px}input[type=file],input[type=password]{width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0d1420;color:var(--text)}button,.download-link{display:inline-block;border:0;border-radius:8px;padding:12px 16px;background:var(--blue);color:white;font:inherit;font-weight:700;cursor:pointer;text-decoration:none;margin-top:14px}button:disabled{opacity:.55;cursor:wait}.secondary{background:#2b374b}.status{min-height:24px;margin:12px 0 0;overflow-wrap:anywhere}.status.ok{color:var(--green)}.status.error{color:var(--red)}.hint{font-size:.92rem}.rule{height:1px;background:var(--line);margin:20px 0}.footer{font-size:.85rem;color:var(--muted);margin-top:24px}.small{font-size:.88rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main class="wrap">
+<header><h1>VELTRIX</h1><p>Lokale Dateiverschlüsselung. Dateien werden in deinem Browser verarbeitet und nicht an einen Server hochgeladen.</p></header>
+<section class="panel" aria-labelledby="encrypt-title">
+<h2 id="encrypt-title">1. Datei verschlüsseln</h2><p class="hint">Wähle eine Datei und ein Passwort mit mindestens 12 Zeichen. Du erhältst eine herunterladbare <code>.vltx</code>-Datei.</p>
+<label class="field" for="encryptFile">Datei auswählen</label><input id="encryptFile" type="file">
+<label class="field" for="encryptPassword">Passwort</label><input id="encryptPassword" type="password" autocomplete="new-password" placeholder="Mindestens 12 Zeichen">
+<button id="encryptBtn" type="button">Verschlüsseln und herunterladen</button><p id="encryptResult" class="status" role="status" aria-live="polite"></p>
+</section>
+<section class="panel" aria-labelledby="decrypt-title">
+<h2 id="decrypt-title">2. Datei entschlüsseln</h2><p class="hint">Wähle eine zuvor mit VELTRIX verschlüsselte <code>.vltx</code>-Datei und gib dasselbe Passwort ein.</p>
+<label class="field" for="decryptFile">.vltx-Datei auswählen</label><input id="decryptFile" type="file" accept=".vltx,application/octet-stream">
+<label class="field" for="decryptPassword">Passwort</label><input id="decryptPassword" type="password" autocomplete="current-password" placeholder="Passwort eingeben">
+<button id="decryptBtn" class="secondary" type="button">Entschlüsseln und herunterladen</button><p id="decryptResult" class="status" role="status" aria-live="polite"></p>
+</section>
+<section class="panel"><h2>Wichtig</h2><p class="hint">VELTRIX nutzt AES-256-GCM und PBKDF2-SHA-256 mit 600.000 Iterationen. Vergisst du das Passwort, kann die Datei nicht wiederhergestellt werden. Teste zuerst mit einer unwichtigen Datei und bewahre unverschlüsselte Originale sicher auf.</p><p class="small">Die Verschlüsselung benötigt einen sicheren Browser-Kontext (HTTPS, z. B. GitHub Pages). Maximale Dateigröße: 100 MB.</p></section>
+<div class="footer">VELTRIX · Einzeldatei · Keine externen Bibliotheken</div>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const encoder = new TextEncoder();
+const decoder = new TextDecoder('utf-8', {fatal:true});
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const MAX_CONTAINER_BYTES = MAX_FILE_BYTES + 16 * 1024;
+const ITERATIONS = 600000;
+const FORMAT_V2 = 'VELTRIX2';
+function status(id, text, kind='') { const el=$(id); el.textContent=text; el.className='status'+(kind?' '+kind:''); }
+function cryptoReady(){ return Boolean(window.isSecureContext && window.crypto && window.crypto.subtle && window.crypto.getRandomValues); }
+function safeFilename(value){ if(typeof value!=='string') return 'datei'; const name=value.replace(/[\\/\u0000-\u001f\u007f]/g,'_').trim().slice(0,180); return (!name||name==='.'||name==='..')?'datei':name; }
+function bytesToBase64(bytes){ let binary=''; for(let i=0;i<bytes.length;i++) binary+=String.fromCharCode(bytes[i]); return btoa(binary); }
+function base64ToBytes(value, length){ if(typeof value!=='string'||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw new Error('Ungültige Dateistruktur.'); const binary=atob(value); const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0)); if(length!==undefined&&bytes.length!==length) throw new Error('Ungültige Dateistruktur.'); return bytes; }
+function downloadBlob(blob, filename){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=safeFilename(filename); a.rel='noopener'; a.style.display='none'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
+function validatePassword(password){ if(typeof password!=='string'||password.length<12) throw new Error('Bitte ein Passwort mit mindestens 12 Zeichen verwenden.'); if(encoder.encode(password).length>1024) throw new Error('Das Passwort ist zu lang.'); }
+async function deriveKey(password,salt){ const material=await crypto.subtle.importKey('raw',encoder.encode(password),'PBKDF2',false,['deriveKey']); return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:ITERATIONS,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']); }
+function parseContainer(bytes){ const newline=bytes.indexOf(10); if(newline<2||newline>4096) throw new Error('Ungültiger Dateikopf.'); const headerBytes=bytes.slice(0,newline); const header=JSON.parse(decoder.decode(headerBytes)); if(!header||typeof header!=='object'||Array.isArray(header)) throw new Error('Ungültiger Dateikopf.'); if(header.format!=='VELTRIX1'&&header.format!=='VELTRIX2') throw new Error('Unbekanntes Dateiformat.'); if(typeof header.name!=='string'||header.name.length>500||typeof header.type!=='string'||header.type.length>200) throw new Error('Ungültiger Dateikopf.'); return {header,headerBytes,salt:base64ToBytes(header.salt,16),iv:base64ToBytes(header.iv,12),ciphertext:bytes.slice(newline+1)}; }
+$('encryptBtn').addEventListener('click',async()=>{ const btn=$('encryptBtn'); const file=$('encryptFile').files[0]; const password=$('encryptPassword').value; if(!file) return status('encryptResult','Bitte zuerst eine Datei auswählen.','error'); if(!cryptoReady()) return status('encryptResult','Sichere Browser-Kryptografie nicht verfügbar. Öffne die Website über HTTPS.','error'); try{ validatePassword(password); if(file.size>MAX_FILE_BYTES) throw new Error('Maximal 100 MB pro Datei.'); btn.disabled=true; status('encryptResult','Verschlüsselung läuft …'); const salt=crypto.getRandomValues(new Uint8Array(16)); const iv=crypto.getRandomValues(new Uint8Array(12)); const header={format:FORMAT_V2,name:safeFilename(file.name),type:(file.type||'application/octet-stream').slice(0,200),salt:bytesToBase64(salt),iv:bytesToBase64(iv)}; const headerBytes=encoder.encode(JSON.stringify(header)); const key=await deriveKey(password,salt); const plaintext=await file.arrayBuffer(); const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:headerBytes,tagLength:128},key,plaintext); downloadBlob(new Blob([headerBytes,new Uint8Array([10]),encrypted],{type:'application/octet-stream'}),safeFilename(file.name)+'.vltx'); $('encryptPassword').value=''; status('encryptResult','Fertig — die verschlüsselte Datei wurde zum Download bereitgestellt.','ok'); }catch(e){status('encryptResult',e instanceof Error?e.message:'Verschlüsselung fehlgeschlagen.','error');}finally{btn.disabled=false;} });
+$('decryptBtn').addEventListener('click',async()=>{ const btn=$('decryptBtn'); const file=$('decryptFile').files[0]; const password=$('decryptPassword').value; if(!file) return status('decryptResult','Bitte eine .vltx-Datei auswählen.','error'); if(!cryptoReady()) return status('decryptResult','Sichere Browser-Kryptografie nicht verfügbar. Öffne die Website über HTTPS.','error'); if(!password||encoder.encode(password).length>1024) return status('decryptResult','Bitte das passende Passwort eingeben.','error'); try{ if(file.size>MAX_CONTAINER_BYTES) throw new Error('Die Datei überschreitet die erlaubte Größe.'); btn.disabled=true; status('decryptResult','Entschlüsselung läuft …'); const bytes=new Uint8Array(await file.arrayBuffer()); const {header,headerBytes,salt,iv,ciphertext}=parseContainer(bytes); if(ciphertext.length<16||ciphertext.length>MAX_FILE_BYTES+16) throw new Error('Ungültige Dateigröße.'); const key=await deriveKey(password,salt); const algorithm={name:'AES-GCM',iv,tagLength:128}; if(header.format===FORMAT_V2) algorithm.additionalData=headerBytes; const plaintext=await crypto.subtle.decrypt(algorithm,key,ciphertext); downloadBlob(new Blob([plaintext],{type:header.type||'application/octet-stream'}),safeFilename(header.name)); $('decryptPassword').value=''; status('decryptResult','Fertig — die entschlüsselte Datei wurde zum Download bereitgestellt.','ok'); }catch(e){const msg=e instanceof Error&&/Größe/.test(e.message)?e.message:'Entschlüsselung fehlgeschlagen: Passwort falsch, Datei beschädigt oder Format ungültig.'; status('decryptResult',msg,'error');}finally{btn.disabled=false;} });
+if(!cryptoReady()){status('encryptResult','Hinweis: Für Verschlüsselung benötigst du HTTPS (GitHub Pages funktioniert).');status('decryptResult','Hinweis: Für Entschlüsselung benötigst du HTTPS (GitHub Pages funktioniert).');}
+</script>
+</body>
+</html>
